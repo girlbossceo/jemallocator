@@ -294,6 +294,11 @@ fn main() {
         cmd.arg("--disable-cache-oblivious");
     }
 
+    if env::var("CARGO_FEATURE_FILL").is_ok() {
+        info!("CARGO_FEATURE_FILL set");
+        cmd.arg("--enable-fill");
+    }
+
     cmd.arg(format!("--host={}", gnu_target(&target)));
     cmd.arg(format!("--build={}", gnu_target(&host)));
     cmd.arg(format!("--prefix={}", out_dir.display()));
