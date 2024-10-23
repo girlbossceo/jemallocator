@@ -27,10 +27,12 @@ use core::alloc::{Alloc, AllocErr, CannotReallocInPlace, Excess};
 use core::ptr::NonNull;
 use core::{
     alloc::{GlobalAlloc, Layout},
+    cmp,
     hint::assert_unchecked,
 };
 
-use libc::{c_int, c_void};
+use crate::ffi::{MALLOCX_ALIGN, MALLOCX_ZERO};
+use libc::c_void;
 
 // This constant equals _Alignof(max_align_t) and is platform-specific. It
 // contains the _maximum_ alignment that the memory allocations returned by the
@@ -51,7 +53,7 @@ use libc::{c_int, c_void};
     target_arch = "mipsel",
     target_arch = "powerpc"
 ))]
-const ALIGNOF_MAX_ALIGN_T: usize = 8;
+const QUANTUM: usize = 8;
 #[cfg(any(
     target_arch = "x86",
     target_arch = "x86_64",
@@ -64,20 +66,21 @@ const ALIGNOF_MAX_ALIGN_T: usize = 8;
     target_arch = "s390x",
     target_arch = "sparc64"
 ))]
-const ALIGNOF_MAX_ALIGN_T: usize = 16;
+const QUANTUM: usize = 16;
 
-/// If `align` is less than `_Alignof(max_align_t)`, and if the requested
-/// allocation `size` is larger than the alignment, we are guaranteed to get a
-/// suitably aligned allocation by default, without passing extra flags, and
-/// this function returns `0`.
-///
-/// Otherwise, it returns the alignment flag to pass to the jemalloc APIs.
-fn layout_to_flags(align: usize, size: usize) -> c_int {
-    if align <= ALIGNOF_MAX_ALIGN_T && align <= size {
-        0
-    } else {
-        ffi::MALLOCX_ALIGN(align)
-    }
+#[inline]
+unsafe fn adjust_layout(layout: Layout) -> Layout {
+    assert_unchecked(layout.align() > 0);
+    let align = cmp::max(layout.align(), QUANTUM);
+    debug_assert!(align >= size_of::<c_void>(), "alignment too small");
+    debug_assert!(align.count_ones() == 1, "alignment not a pow2");
+
+    assert_unchecked(layout.size() > 0);
+    let size = cmp::max(layout.size(), QUANTUM);
+    debug_assert!(size >= size_of::<c_void>(), "size too small");
+    debug_assert!(size >= align, "allocating a fragment");
+
+    Layout::from_size_align_unchecked(size, align)
 }
 
 /// Handle to the jemalloc allocator
@@ -92,47 +95,71 @@ pub struct Jemalloc;
 unsafe impl GlobalAlloc for Jemalloc {
     #[inline]
     unsafe fn alloc(&self, layout: Layout) -> *mut u8 {
-        assert_unchecked(layout.size() != 0);
-        let flags = layout_to_flags(layout.align(), layout.size());
-        let ptr = if flags == 0 {
-            ffi::malloc(layout.size())
-        } else {
-            ffi::mallocx(layout.size(), flags)
-        };
+        let layout = adjust_layout(layout);
+        let flags = MALLOCX_ALIGN(layout.align());
+        debug_assert!(
+            ffi::nallocx(layout.size(), flags) >= layout.size(),
+            "alloc: nallocx() reported failure"
+        );
+
+        let ptr = ffi::mallocx(layout.size(), flags);
+        debug_assert!(
+            ffi::sallocx(ptr, flags) >= layout.size(),
+            "alloc: sallocx() size mismatch"
+        );
+
         ptr as *mut u8
     }
 
     #[inline]
     unsafe fn alloc_zeroed(&self, layout: Layout) -> *mut u8 {
-        assert_unchecked(layout.size() != 0);
-        let flags = layout_to_flags(layout.align(), layout.size());
-        let ptr = if flags == 0 {
-            ffi::calloc(1, layout.size())
-        } else {
-            ffi::mallocx(layout.size(), flags | ffi::MALLOCX_ZERO)
-        };
+        let layout = adjust_layout(layout);
+        let flags = MALLOCX_ALIGN(layout.align()) | MALLOCX_ZERO;
+        debug_assert!(
+            ffi::nallocx(layout.size(), flags) >= layout.size(),
+            "alloc_zeroed: nallocx() reported failure"
+        );
+
+        let ptr = ffi::mallocx(layout.size(), flags);
+        debug_assert!(
+            ffi::sallocx(ptr, flags) >= layout.size(),
+            "alloc_zeroed: sallocx() size mismatch"
+        );
+
+        ptr as *mut u8
+    }
+
+    #[inline]
+    unsafe fn realloc(&self, ptr: *mut u8, layout: Layout, new_size: usize) -> *mut u8 {
+        let layout = Layout::from_size_align_unchecked(new_size, layout.align());
+        let layout = adjust_layout(layout);
+        let flags = MALLOCX_ALIGN(layout.align());
+        debug_assert!(
+            ffi::nallocx(layout.size(), flags) >= layout.size(),
+            "realloc: nallocx() reported failure"
+        );
+
+        let ptr = ffi::rallocx(ptr as *mut c_void, layout.size(), flags);
+        debug_assert!(
+            ffi::sallocx(ptr, flags) >= layout.size(),
+            "reelloc: sallocx() size mismatch"
+        );
+
         ptr as *mut u8
     }
 
     #[inline]
     unsafe fn dealloc(&self, ptr: *mut u8, layout: Layout) {
         assert_unchecked(!ptr.is_null());
-        assert_unchecked(layout.size() != 0);
-        let flags = layout_to_flags(layout.align(), layout.size());
-        ffi::sdallocx(ptr as *mut c_void, layout.size(), flags)
-    }
+        let ptr = ptr as *mut c_void;
+        let layout = adjust_layout(layout);
+        let flags = MALLOCX_ALIGN(layout.align());
+        debug_assert!(
+            ffi::sallocx(ptr, flags) >= layout.size(),
+            "dealloc: sallocx() size mismatch"
+        );
 
-    #[inline]
-    unsafe fn realloc(&self, ptr: *mut u8, layout: Layout, new_size: usize) -> *mut u8 {
-        assert_unchecked(layout.size() != 0);
-        assert_unchecked(new_size != 0);
-        let flags = layout_to_flags(layout.align(), new_size);
-        let ptr = if flags == 0 {
-            ffi::realloc(ptr as *mut c_void, new_size)
-        } else {
-            ffi::rallocx(ptr as *mut c_void, new_size, flags)
-        };
-        ptr as *mut u8
+        ffi::sdallocx(ptr, layout.size(), flags)
     }
 }
 
