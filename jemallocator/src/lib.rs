@@ -23,9 +23,12 @@
 
 #[cfg(feature = "alloc_trait")]
 use core::alloc::{Alloc, AllocErr, CannotReallocInPlace, Excess};
-use core::alloc::{GlobalAlloc, Layout};
 #[cfg(feature = "alloc_trait")]
 use core::ptr::NonNull;
+use core::{
+    alloc::{GlobalAlloc, Layout},
+    hint::assert_unchecked,
+};
 
 use libc::{c_int, c_void};
 
@@ -77,16 +80,6 @@ fn layout_to_flags(align: usize, size: usize) -> c_int {
     }
 }
 
-// Assumes a condition that always must hold.
-macro_rules! assume {
-    ($e:expr) => {
-        debug_assert!($e);
-        if !($e) {
-            core::hint::unreachable_unchecked();
-        }
-    };
-}
-
 /// Handle to the jemalloc allocator
 ///
 /// This type implements the `GlobalAllocAlloc` trait, allowing usage a global allocator.
@@ -99,7 +92,7 @@ pub struct Jemalloc;
 unsafe impl GlobalAlloc for Jemalloc {
     #[inline]
     unsafe fn alloc(&self, layout: Layout) -> *mut u8 {
-        assume!(layout.size() != 0);
+        assert_unchecked(layout.size() != 0);
         let flags = layout_to_flags(layout.align(), layout.size());
         let ptr = if flags == 0 {
             ffi::malloc(layout.size())
@@ -111,7 +104,7 @@ unsafe impl GlobalAlloc for Jemalloc {
 
     #[inline]
     unsafe fn alloc_zeroed(&self, layout: Layout) -> *mut u8 {
-        assume!(layout.size() != 0);
+        assert_unchecked(layout.size() != 0);
         let flags = layout_to_flags(layout.align(), layout.size());
         let ptr = if flags == 0 {
             ffi::calloc(1, layout.size())
@@ -123,16 +116,16 @@ unsafe impl GlobalAlloc for Jemalloc {
 
     #[inline]
     unsafe fn dealloc(&self, ptr: *mut u8, layout: Layout) {
-        assume!(!ptr.is_null());
-        assume!(layout.size() != 0);
+        assert_unchecked(!ptr.is_null());
+        assert_unchecked(layout.size() != 0);
         let flags = layout_to_flags(layout.align(), layout.size());
         ffi::sdallocx(ptr as *mut c_void, layout.size(), flags)
     }
 
     #[inline]
     unsafe fn realloc(&self, ptr: *mut u8, layout: Layout, new_size: usize) -> *mut u8 {
-        assume!(layout.size() != 0);
-        assume!(new_size != 0);
+        assert_unchecked(layout.size() != 0);
+        assert_unchecked(new_size != 0);
         let flags = layout_to_flags(layout.align(), new_size);
         let ptr = if flags == 0 {
             ffi::realloc(ptr as *mut c_void, new_size)
