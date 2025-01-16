@@ -64,12 +64,14 @@ pub fn name_to_mib(name: &[u8], mib: &mut [usize]) -> Result<()> {
 /// sizes of `bool` and `u8` match, but `bool` cannot represent all values that
 /// `u8` can.
 pub unsafe fn read_mib<T: Copy>(mib: &[usize]) -> Result<T> {
-    let mut value = MaybeUninit { init: () };
     let mut len = mem::size_of::<T>();
+    let mut value = MaybeUninit { init: () };
+    let value_ptr = &mut value.init as *mut _ as *mut _;
+
     cvt(tikv_jemalloc_sys::mallctlbymib(
         mib.as_ptr(),
         mib.len(),
-        &mut value.init as *mut _ as *mut _,
+        value_ptr,
         &mut len,
         ptr::null_mut(),
         0,
@@ -90,11 +92,13 @@ pub unsafe fn read_mib<T: Copy>(mib: &[usize]) -> Result<T> {
 pub unsafe fn read<T: Copy>(name: &[u8]) -> Result<T> {
     validate_name(name);
 
-    let mut value = MaybeUninit { init: () };
     let mut len = mem::size_of::<T>();
+    let mut value = MaybeUninit { init: () };
+    let value_ptr = &mut value.init as *mut _ as *mut _;
+
     cvt(tikv_jemalloc_sys::mallctl(
         name as *const _ as *const c_char,
-        &mut value.init as *mut _ as *mut _,
+        value_ptr,
         &mut len,
         ptr::null_mut(),
         0,
@@ -115,13 +119,20 @@ pub unsafe fn read<T: Copy>(name: &[u8]) -> Result<T> {
 /// sizes of `bool` and `u8` match, but `bool` cannot represent all values that
 /// `u8` can.
 pub unsafe fn write_mib<T>(mib: &[usize], mut value: T) -> Result<()> {
+    let len = mem::size_of::<T>();
+    let value_ptr = if len > 0 {
+        &mut value as *mut _ as *mut _
+    } else {
+        ptr::null_mut()
+    };
+
     cvt(tikv_jemalloc_sys::mallctlbymib(
         mib.as_ptr(),
         mib.len(),
         ptr::null_mut(),
         ptr::null_mut(),
-        &mut value as *mut _ as *mut _,
-        mem::size_of::<T>(),
+        value_ptr,
+        len,
     ))
 }
 
@@ -137,12 +148,19 @@ pub unsafe fn write_mib<T>(mib: &[usize], mut value: T) -> Result<()> {
 pub unsafe fn write<T>(name: &[u8], mut value: T) -> Result<()> {
     validate_name(name);
 
+    let len = mem::size_of::<T>();
+    let value_ptr = if len > 0 {
+        &mut value as *mut _ as *mut _
+    } else {
+        ptr::null_mut()
+    };
+
     cvt(tikv_jemalloc_sys::mallctl(
         name as *const _ as *const c_char,
         ptr::null_mut(),
         ptr::null_mut(),
-        &mut value as *mut _ as *mut _,
-        mem::size_of::<T>(),
+        value_ptr,
+        len,
     ))
 }
 
@@ -158,18 +176,41 @@ pub unsafe fn write<T>(name: &[u8], mut value: T) -> Result<()> {
 /// invalid `T`, for example, by passing `T=u8` for a key expecting `bool`. The
 /// sizes of `bool` and `u8` match, but `bool` cannot represent all values that
 /// `u8` can.
-pub unsafe fn update_mib<T>(mib: &[usize], mut value: T) -> Result<T> {
-    let mut len = mem::size_of::<T>();
+pub unsafe fn update_mib<T: Copy>(
+    mib: &[usize],
+    mut in_value: T,
+) -> Result<T> {
+    let in_len = mem::size_of::<T>();
+    let in_value_ptr = if in_len > 0 {
+        &mut in_value as *mut _ as *mut _
+    } else {
+        ptr::null_mut()
+    };
+
+    let mut out_len = in_len;
+    let mut out_value = MaybeUninit { init: () };
+    let out_value_ptr = if out_len > 0 {
+        &mut out_value.init as *mut _ as *mut _
+    } else {
+        ptr::null_mut()
+    };
+
+    let out_len_ptr = if out_len > 0 {
+        &mut out_len as *mut _ as *mut _
+    } else {
+        ptr::null_mut()
+    };
+
     cvt(tikv_jemalloc_sys::mallctlbymib(
         mib.as_ptr(),
         mib.len(),
-        &mut value as *mut _ as *mut _,
-        &mut len,
-        &mut value as *mut _ as *mut _,
-        len,
+        out_value_ptr,
+        out_len_ptr,
+        in_value_ptr,
+        in_len,
     ))?;
-    assert_eq!(len, mem::size_of::<T>());
-    Ok(value)
+    assert_eq!(in_len, mem::size_of::<T>());
+    Ok(out_value.maybe_uninit)
 }
 
 /// Uses the null-terminated string `name` as key to the _MALLCTL NAMESPACE_ and
@@ -181,19 +222,39 @@ pub unsafe fn update_mib<T>(mib: &[usize], mut value: T) -> Result<T> {
 /// invalid `T`, for example, by passing `T=u8` for a key expecting `bool`. The
 /// sizes of `bool` and `u8` match, but `bool` cannot represent all values that
 /// `u8` can.
-pub unsafe fn update<T>(name: &[u8], mut value: T) -> Result<T> {
+pub unsafe fn update<T: Copy>(name: &[u8], mut in_value: T) -> Result<T> {
     validate_name(name);
 
-    let mut len = mem::size_of::<T>();
+    let in_len = mem::size_of::<T>();
+    let in_value_ptr = if in_len > 0 {
+        &mut in_value as *mut _ as *mut _
+    } else {
+        ptr::null_mut()
+    };
+
+    let mut out_len = in_len;
+    let mut out_value = MaybeUninit { init: () };
+    let out_value_ptr = if out_len > 0 {
+        &mut out_value.init as *mut _ as *mut _
+    } else {
+        ptr::null_mut()
+    };
+
+    let out_len_ptr = if out_len > 0 {
+        &mut out_len as *mut _ as *mut _
+    } else {
+        ptr::null_mut()
+    };
+
     cvt(tikv_jemalloc_sys::mallctl(
         name as *const _ as *const c_char,
-        &mut value as *mut _ as *mut _,
-        &mut len,
-        &mut value as *mut _ as *mut _,
-        len,
+        out_value_ptr,
+        out_len_ptr,
+        in_value_ptr,
+        in_len,
     ))?;
-    assert_eq!(len, mem::size_of::<T>());
-    Ok(value)
+    assert_eq!(out_len, mem::size_of::<T>());
+    Ok(out_value.maybe_uninit)
 }
 
 /// Uses the MIB `mib` as key to the _MALLCTL NAMESPACE_ and reads its value.
