@@ -66,10 +66,16 @@ pub fn name_to_mib(name: &[u8], mib: &mut [usize]) -> Result<()> {
 pub unsafe fn read_mib<T: Copy>(mib: &[usize]) -> Result<T> {
     let mut value = MaybeUninit { init: () };
     let mut len = mem::size_of::<T>();
+    let value_ptr = if len > 0 {
+        &mut value.init as *mut _ as *mut _
+    } else {
+        ptr::null_mut()
+    };
+
     cvt(tikv_jemalloc_sys::mallctlbymib(
         mib.as_ptr(),
         mib.len(),
-        &mut value.init as *mut _ as *mut _,
+        value_ptr,
         &mut len,
         ptr::null_mut(),
         0,
@@ -92,9 +98,15 @@ pub unsafe fn read<T: Copy>(name: &[u8]) -> Result<T> {
 
     let mut value = MaybeUninit { init: () };
     let mut len = mem::size_of::<T>();
+    let value_ptr = if len > 0 {
+        &mut value.init as *mut _ as *mut _
+    } else {
+        ptr::null_mut()
+    };
+
     cvt(tikv_jemalloc_sys::mallctl(
         name as *const _ as *const c_char,
-        &mut value.init as *mut _ as *mut _,
+        value_ptr,
         &mut len,
         ptr::null_mut(),
         0,
@@ -115,13 +127,20 @@ pub unsafe fn read<T: Copy>(name: &[u8]) -> Result<T> {
 /// sizes of `bool` and `u8` match, but `bool` cannot represent all values that
 /// `u8` can.
 pub unsafe fn write_mib<T>(mib: &[usize], mut value: T) -> Result<()> {
+    let len = mem::size_of::<T>();
+    let value_ptr = if len > 0 {
+        &mut value as *mut _ as *mut _
+    } else {
+        ptr::null_mut()
+    };
+
     cvt(tikv_jemalloc_sys::mallctlbymib(
         mib.as_ptr(),
         mib.len(),
         ptr::null_mut(),
         ptr::null_mut(),
-        &mut value as *mut _ as *mut _,
-        mem::size_of::<T>(),
+        value_ptr,
+        len,
     ))
 }
 
@@ -137,12 +156,19 @@ pub unsafe fn write_mib<T>(mib: &[usize], mut value: T) -> Result<()> {
 pub unsafe fn write<T>(name: &[u8], mut value: T) -> Result<()> {
     validate_name(name);
 
+    let len = mem::size_of::<T>();
+    let value_ptr = if len > 0 {
+        &mut value as *mut _ as *mut _
+    } else {
+        ptr::null_mut()
+    };
+
     cvt(tikv_jemalloc_sys::mallctl(
         name as *const _ as *const c_char,
         ptr::null_mut(),
         ptr::null_mut(),
-        &mut value as *mut _ as *mut _,
-        mem::size_of::<T>(),
+        value_ptr,
+        len,
     ))
 }
 
@@ -160,12 +186,18 @@ pub unsafe fn write<T>(name: &[u8], mut value: T) -> Result<()> {
 /// `u8` can.
 pub unsafe fn update_mib<T>(mib: &[usize], mut value: T) -> Result<T> {
     let mut len = mem::size_of::<T>();
+    let value_ptr = if len > 0 {
+        &mut value as *mut _ as *mut _
+    } else {
+        ptr::null_mut()
+    };
+
     cvt(tikv_jemalloc_sys::mallctlbymib(
         mib.as_ptr(),
         mib.len(),
-        &mut value as *mut _ as *mut _,
+        value_ptr,
         &mut len,
-        &mut value as *mut _ as *mut _,
+        value_ptr,
         len,
     ))?;
     assert_eq!(len, mem::size_of::<T>());
@@ -185,11 +217,17 @@ pub unsafe fn update<T>(name: &[u8], mut value: T) -> Result<T> {
     validate_name(name);
 
     let mut len = mem::size_of::<T>();
+    let value_ptr = if len > 0 {
+        &mut value as *mut _ as *mut _
+    } else {
+        ptr::null_mut()
+    };
+
     cvt(tikv_jemalloc_sys::mallctl(
         name as *const _ as *const c_char,
-        &mut value as *mut _ as *mut _,
+        value_ptr,
         &mut len,
-        &mut value as *mut _ as *mut _,
+        value_ptr,
         len,
     ))?;
     assert_eq!(len, mem::size_of::<T>());
