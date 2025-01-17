@@ -32,7 +32,7 @@ use core::{
 };
 
 use crate::ffi::{MALLOCX_ALIGN, MALLOCX_ZERO};
-use libc::c_void;
+use libc::{c_void, uintptr_t};
 
 // This constant equals _Alignof(max_align_t) and is platform-specific. It
 // contains the _maximum_ alignment that the memory allocations returned by the
@@ -98,6 +98,11 @@ unsafe impl GlobalAlloc for Jemalloc {
 
         let ptr = ffi::mallocx(layout.size(), flags);
         debug_assert!(
+            ptr as uintptr_t % layout.align() == 0,
+            "alloc: alignment mismatch"
+        );
+
+        debug_assert!(
             ffi::sallocx(ptr, flags) >= layout.size(),
             "alloc: sallocx() size mismatch"
         );
@@ -115,6 +120,11 @@ unsafe impl GlobalAlloc for Jemalloc {
         );
 
         let ptr = ffi::mallocx(layout.size(), flags);
+        debug_assert!(
+            ptr as uintptr_t % layout.align() == 0,
+            "alloc: alignment mismatch"
+        );
+
         debug_assert!(
             ffi::sallocx(ptr, flags) >= layout.size(),
             "alloc_zeroed: sallocx() size mismatch"
@@ -135,6 +145,11 @@ unsafe impl GlobalAlloc for Jemalloc {
 
         let ptr = ffi::rallocx(ptr as *mut c_void, layout.size(), flags);
         debug_assert!(
+            ptr as uintptr_t % layout.align() == 0,
+            "alloc: alignment mismatch"
+        );
+
+        debug_assert!(
             ffi::sallocx(ptr, flags) >= layout.size(),
             "reelloc: sallocx() size mismatch"
         );
@@ -147,6 +162,11 @@ unsafe impl GlobalAlloc for Jemalloc {
         assert_unchecked(!ptr.is_null());
         let ptr = ptr as *mut c_void;
         let layout = adjust_layout(layout);
+        debug_assert!(
+            ptr as uintptr_t % layout.align() == 0,
+            "dealloc: alignment mismatch"
+        );
+
         let flags = MALLOCX_ALIGN(layout.align());
         debug_assert!(
             ffi::sallocx(ptr, flags) >= layout.size(),
