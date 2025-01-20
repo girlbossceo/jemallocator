@@ -5,8 +5,11 @@ use tikv_jemallocator::Jemalloc;
 static A: Jemalloc = Jemalloc;
 
 #[test]
+#[allow(clippy::reserve_after_initialization)]
 fn smoke() {
-    let _a = [3];
+    let mut a = Vec::new();
+    a.reserve(1);
+    a.push(3);
 }
 
 /// https://github.com/rust-lang/rust/issues/45955
