@@ -10,6 +10,7 @@ use std::panic::{self, AssertUnwindSafe};
 ///
 /// All options default to `false`.
 #[derive(Copy, Clone, Default)]
+#[non_exhaustive]
 pub struct Options {
     /// If set, the output will be JSON-formatted.
     ///
@@ -45,8 +46,6 @@ pub struct Options {
     ///
     /// This corresponds to the `x` character.
     pub skip_mutex_statistics: bool,
-
-    _p: (),
 }
 
 struct State<W> {
@@ -80,7 +79,7 @@ where
 ///
 /// The information is the same that can be retrieved by the individual lookup methods in this
 /// crate, but all done at once.
-#[cfg_attr(feature = "cargo-clippy", allow(clippy::cast_possible_wrap))]
+#[allow(clippy::cast_possible_wrap)]
 pub fn stats_print<W>(writer: W, options: Options) -> io::Result<()>
 where
     W: Write,
@@ -157,7 +156,6 @@ mod test {
             skip_bin_size_classes: true,
             skip_large_size_classes: true,
             skip_mutex_statistics: true,
-            _p: (),
         };
         stats_print(&mut buf, options).unwrap();
         println!("{}", String::from_utf8(buf).unwrap());

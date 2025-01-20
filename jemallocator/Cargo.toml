@@ -46,7 +46,7 @@ tikv-jemalloc-ctl = { path = "../jemalloc-ctl", version = "0.6.0" }
 
 [features]
 default = ["background_threads_runtime_support"]
-alloc_trait = []
+#alloc_trait = []
 profiling = ["tikv-jemalloc-sys/profiling"]
 debug = ["tikv-jemalloc-sys/debug"]
 stats = ["tikv-jemalloc-sys/stats"]
@@ -60,3 +60,6 @@ disable_cache_oblivious = ["tikv-jemalloc-sys/disable_cache_oblivious"]
 [package.metadata.docs.rs]
 features = []
 rustdoc-args = [ "--cfg", "jemallocator_docs" ]
+
+[lints.rust]
+unexpected_cfgs = "allow"

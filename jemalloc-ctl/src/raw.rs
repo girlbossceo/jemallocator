@@ -385,7 +385,7 @@ union MaybeUninit<T: Copy> {
 mod tests {
     use super::*;
     #[test]
-    #[cfg(not(target_arch = "mips64el"))] // FIXME: SIGFPE
+    #[cfg(not(target_arch = "mips64"))] // FIXME: SIGFPE
     fn test_ptr2str() {
         unsafe {
             //{ // This is undefined behavior:

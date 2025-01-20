@@ -79,10 +79,12 @@ fn main() {
 static ALLOC: tikv_jemallocator::Jemalloc = tikv_jemallocator::Jemalloc;
 
 use crate::std::{fmt, mem, num, ops, ptr, result, slice, str};
+
 #[cfg(not(feature = "use_std"))]
 use core as std;
+
 #[cfg(feature = "use_std")]
-use std;
+pub(crate) use ::std;
 
 #[macro_use]
 mod macros;

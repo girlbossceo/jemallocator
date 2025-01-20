@@ -63,7 +63,7 @@ macro_rules! r {
 
             #[cfg(test)]
             #[test]
-            #[cfg(not(target_arch = "mips64el"))]
+            #[cfg(not(target_arch = "mips64"))]
             #[allow(unused)]
             fn [<$id _read_test>]() {
                 match stringify!($id) {
@@ -112,7 +112,7 @@ macro_rules! w {
 
             #[cfg(test)]
             #[test]
-            #[cfg(not(target_arch = "mips64el"))]
+            #[cfg(not(target_arch = "mips64"))]
             fn [<$id _write_test>]() {
                 match stringify!($id) {
                     "background_thread" |
@@ -161,7 +161,7 @@ macro_rules! u {
 
             #[cfg(test)]
             #[test]
-            #[cfg(not(target_arch = "mips64el"))]
+            #[cfg(not(target_arch = "mips64"))]
             #[allow(unused)]
             fn [<$id _update_test>]() {
                 match stringify!($id) {

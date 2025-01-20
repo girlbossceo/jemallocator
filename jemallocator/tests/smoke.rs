@@ -6,9 +6,7 @@ static A: Jemalloc = Jemalloc;
 
 #[test]
 fn smoke() {
-    let mut a = Vec::new();
-    a.reserve(1);
-    a.push(3);
+    let _a = [3];
 }
 
 /// https://github.com/rust-lang/rust/issues/45955

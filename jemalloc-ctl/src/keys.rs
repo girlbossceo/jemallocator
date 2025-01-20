@@ -355,6 +355,27 @@ impl Access<&'static str> for Name {
     }
 }
 
+pub trait MibArg:
+    Copy
+    + Clone
+    + PartialEq
+    + Default
+    + fmt::Debug
+    + AsRef<[usize]>
+    + AsMut<[usize]>
+{
+}
+impl<T> MibArg for T where
+    T: Copy
+        + Clone
+        + PartialEq
+        + Default
+        + fmt::Debug
+        + AsRef<[usize]>
+        + AsMut<[usize]>
+{
+}
+
 #[cfg(test)]
 mod tests {
     use super::{Access, AsName, Mib, MibStr};
@@ -426,25 +447,4 @@ mod tests {
 
         assert_eq!(dss, dss2);
     }
-}
-
-pub trait MibArg:
-    Copy
-    + Clone
-    + PartialEq
-    + Default
-    + fmt::Debug
-    + AsRef<[usize]>
-    + AsMut<[usize]>
-{
-}
-impl<T> MibArg for T where
-    T: Copy
-        + Clone
-        + PartialEq
-        + Default
-        + fmt::Debug
-        + AsRef<[usize]>
-        + AsMut<[usize]>
-{
 }
